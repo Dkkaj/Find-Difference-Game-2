@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Game Admin | Find the Difference</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --primary: #6366f1; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --danger: #ef4444; --success: #22c55e; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); color: var(--text); touch-action: manipulation; overflow-x: hidden; }
+        .hidden { display: none !important; }
+        #login-screen { height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+        .login-card { background: white; padding: 2rem; border-radius: 1rem; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .header { background: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .container { padding: 1rem; max-width: 1000px; margin: auto; }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; border: none; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; transition: transform 0.1s; }
+        .btn:active { transform: scale(0.95); }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid #ddd; background: white; }
+        .editor-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 1rem; }
+        @media (min-width: 768px) { .editor-grid { grid-template-columns: 1fr 350px; } }
+        .canvas-container { position: relative; width: 100%; aspect-ratio: 1280/720; background: #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .canvas-container img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        .marker-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; z-index: 10; }
+        .diff-marker { position: absolute; border: 3px solid #ffff00; border-radius: 50%; background: rgba(255, 255, 0, 0.3); transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; color: black; pointer-events: none; }
+        .input-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #64748b; }
+        input { width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; }
+        .level-card { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .level-thumb { width: 80px; height: 45px; object-fit: cover; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-card">
+            <h2 style="margin-top:0">Admin Login</h2>
+            <div class="input-group"><label>Email</label><input type="email" id="login-email"></div>
+            <div class="input-group"><label>Password</label><input type="password" id="login-pass"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="handleLogin()">Login</button>
+        </div>
+    </div>
+
+    <div id="dashboard" class="hidden">
+        <div class="header"><strong><i class="fas fa-tools"></i> Admin Dashboard</strong><button class="btn btn-outline" onclick="auth.signOut()">Logout</button></div>
+        <div class="container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin: 1.5rem 0;"><h3>Levels</h3><button class="btn btn-primary" onclick="openEditor()">+ New Level</button></div>
+            <div id="levels-list"></div>
+        </div>
+    </div>
+
+    <div id="editor" class="hidden">
+        <div class="header"><button class="btn btn-outline" onclick="closeEditor()">Back</button><button class="btn btn-primary" onclick="saveLevel()">Save</button></div>
+        <div class="container">
+            <div class="editor-grid">
+                <div>
+                    <label>Original Image (Preview)</label>
+                    <div class="canvas-container" style="margin-bottom:1rem;"><img id="prev-img1" src=""></div>
+                    <label>Edited Image (Click to mark difference)</label>
+                    <div class="canvas-container" id="editor-canvas-container">
+                        <img id="prev-img2" src="">
+                        <div class="marker-layer" onclick="addDifference(event)" id="marker-layer"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="input-group"><label>Title</label><input type="text" id="lvl-title"></div>
+                    <div class="input-group"><label>Original URL</label><input type="text" id="lvl-img1" onchange="updatePreviews()"></div>
+                    <div class="input-group"><label>Edited URL</label><input type="text" id="lvl-img2" onchange="updatePreviews()"></div>
+                    
+                    <div class="input-group">
+                        <label>Brush Size: <span id="rad-val" style="color:var(--primary)">25</span>px</label>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-outline" onclick="changeRadius(-5)" style="flex:1">- Smaller</button>
+                            <button class="btn btn-outline" onclick="changeRadius(5)" style="flex:1">+ Larger</button>
+                        </div>
+                    </div>
+
+                    <h4 style="margin:1.5rem 0 0.5rem 0">Giveaway Details</h4>
+                    <input type="text" id="ga-img" placeholder="Banner URL" style="margin-bottom:8px">
+                    <input type="text" id="ga-link" placeholder="Product Link" style="margin-bottom:8px">
+                    <input type="text" id="ga-coupon" placeholder="Coupon Code">
+                    
+                    <div id="diff-list" style="margin-top:1.5rem;">
+                        <label>Marked Differences:</label>
+                        <div id="diff-count-text" style="font-size:0.85rem; color:#64748b">No points added yet.</div>
+                        <button class="btn btn-outline" style="margin-top:10px; font-size:0.8rem; color:var(--danger)" onclick="clearDifferences()">Clear All Points</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAl8WZfpWJGSztysBh6pSI4z6kvwPl2oow",
+            authDomain: "find-difference-game-1b210.firebaseapp.com",
+            databaseURL: "https://find-difference-game-1b210-default-rtdb.firebaseio.com",
+            projectId: "find-difference-game-1b210",
+            storageBucket: "find-difference-game-1b210.firebasestorage.app",
+            messagingSenderId: "618703207722",
+            appId: "1:618703207722:web:ed54f30d20b0cb0c6cb253"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth(), db = firebase.database();
+
+        let currentLevelId = null, differences = [], currentRadius = 25;
+        const LOGIC_W = 1280, LOGIC_H = 720;
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                db.ref(`admins/${user.uid}`).once('value', snap => {
+                    if (snap.val() === true) { showScreen('dashboard'); loadLevels(); }
+                    else { alert("Access Denied: UID not authorized."); auth.signOut(); }
+                });
+            } else { showScreen('login-screen'); }
+        });
+
+        async function handleLogin() {
+            const e = document.getElementById('login-email').value, p = document.getElementById('login-pass').value;
+            try { await auth.signInWithEmailAndPassword(e, p); } catch (err) { alert(err.message); }
+        }
+
+        function changeRadius(v) {
+            currentRadius = Math.max(5, Math.min(100, currentRadius + v));
+            document.getElementById('rad-val').innerText = currentRadius;
+        }
+
+        function addDifference(e) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = Math.round(((e.clientX - rect.left) / rect.width) * LOGIC_W);
+            const y = Math.round(((e.clientY - rect.top) / rect.height) * LOGIC_H);
+            differences.push({ x, y, radius: currentRadius });
+            renderMarkers();
+        }
+
+        function renderMarkers() {
+            const layer = document.getElementById('marker-layer'), text = document.getElementById('diff-count-text');
+            layer.innerHTML = ''; 
+            text.innerText = differences.length > 0 ? `${differences.length} points marked.` : "No points added yet.";
+            
+            differences.forEach((d, i) => {
+                const dot = document.createElement('div');
+                dot.className = 'diff-marker';
+                dot.style.left = `${(d.x / LOGIC_W) * 100}%`;
+                dot.style.top = `${(d.y / LOGIC_H) * 100}%`;
+                // Calculate visual radius relative to current displayed container size
+                const visualSize = (d.radius / LOGIC_W) * layer.offsetWidth * 2;
+                dot.style.width = visualSize + 'px'; dot.style.height = visualSize + 'px';
+                dot.innerText = i + 1;
+                layer.appendChild(dot);
+            });
+        }
+
+        function clearDifferences() { if(confirm("Clear all markers?")) { differences = []; renderMarkers(); } }
+
+        function updatePreviews() {
+            document.getElementById('prev-img1').src = document.getElementById('lvl-img1').value;
+            document.getElementById('prev-img2').src = document.getElementById('lvl-img2').value;
+        }
+
+        function loadLevels() {
+            db.ref('levels').on('value', snap => {
+                const list = document.getElementById('levels-list'); list.innerHTML = '';
+                const data = snap.val(); if(!data) return;
+                Object.keys(data).forEach(id => {
+                    const lvl = data[id];
+                    list.innerHTML += `<div class="level-card"><img src="${lvl.image1}" class="level-thumb"><div style="flex:1"><b>${lvl.title}</b></div><div style="display:flex; gap:5px;"><button class="btn btn-outline" onclick="editLevel('${id}')"><i class="fas fa-edit"></i></button><button class="btn btn-outline" style="color:var(--danger)" onclick="deleteLevel('${id}')"><i class="fas fa-trash"></i></button></div></div>`;
+                });
+            });
+        }
+
+        function deleteLevel(id) { if(confirm("Delete this level?")) db.ref(`levels/${id}`).remove(); }
+
+        function saveLevel() {
+            if(!document.getElementById('lvl-title').value) return alert("Title required");
+            const id = currentLevelId || db.ref('levels').push().key;
+            db.ref(`levels/${id}`).set({
+                title: document.getElementById('lvl-title').value,
+                image1: document.getElementById('lvl-img1').value,
+                image2: document.getElementById('lvl-img2').value,
+                differences, width: LOGIC_W, height: LOGIC_H,
+                giveaway: { image: document.getElementById('ga-img').value, link: document.getElementById('ga-link').value, coupon: document.getElementById('ga-coupon').value }
+            }).then(() => { alert("Level Saved!"); closeEditor(); });
+        }
+
+        function editLevel(id) {
+            db.ref(`levels/${id}`).once('value', snap => {
+                const l = snap.val(); currentLevelId = id; differences = l.differences || [];
+                document.getElementById('lvl-title').value = l.title;
+                document.getElementById('lvl-img1').value = l.image1;
+                document.getElementById('lvl-img2').value = l.image2;
+                document.getElementById('ga-img').value = l.giveaway?.image || '';
+                document.getElementById('ga-link').value = l.giveaway?.link || '';
+                document.getElementById('ga-coupon').value = l.giveaway?.coupon || '';
+                updatePreviews(); showScreen('editor'); setTimeout(renderMarkers, 500);
+            });
+        }
+
+        function showScreen(s) { document.querySelectorAll('body > div').forEach(d => d.classList.add('hidden')); document.getElementById(s).classList.remove('hidden'); }
+        function openEditor() { currentLevelId = null; differences = []; document.querySelectorAll('#editor input').forEach(i => i.value=''); showScreen('editor'); renderMarkers(); }
+        function closeEditor() { showScreen('dashboard'); }
+    </script>
+</body>
+</html>
