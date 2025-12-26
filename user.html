@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Difference Master | Pro</title>
+    
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3588683832476101" crossorigin="anonymous"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --primary: #ff4757; --secondary: #2f3542; --accent: #ffa502; --success: #2ed573; --bg: #f1f2f6; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Poppins', sans-serif; margin: 0; background: var(--bg); overflow: hidden; height: 100vh; position: fixed; width: 100vw; }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); transition: transform 0.3s; }
+        .hidden { display: none !important; }
+        #start-screen { background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%); justify-content: center; align-items: center; color: white; }
+        .logo { font-family: 'Luckiest Guy', cursive; font-size: 3.5rem; text-shadow: 4px 4px #2f3542; margin-bottom: 2rem; }
+        
+        .ad-banner-fixed { 
+            position: fixed; bottom: 0; width: 100%; height: 60px; 
+            background: white; border-top: 1px solid #ddd; 
+            display: flex; justify-content: center; align-items: center; z-index: 90;
+        }
+
+        .level-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; padding-bottom: 80px; }
+        .level-card { background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; padding-bottom: 10px; cursor: pointer; }
+        .level-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; }
+        .game-header { background: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .game-area { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 10px; gap: 10px; }
+        .image-wrapper { position: relative; width: 100%; aspect-ratio: 1280/720; background: #ccc; border-radius: 10px; overflow: hidden; }
+        .image-wrapper img { width: 100%; height: 100%; display: block; pointer-events: none; }
+        .tap-feedback { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; animation: pulse 0.6s forwards; }
+        .correct-tap { border: 4px solid var(--success); box-shadow: 0 0 15px var(--success); }
+        .wrong-tap { border: 4px solid var(--primary); box-shadow: 0 0 15px var(--primary); }
+        @keyframes pulse { 0% { width: 10px; height: 10px; opacity: 1; } 100% { width: 60px; height: 60px; opacity: 0; } }
+        
+        #giveaway-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .modal-content { background: white; border-radius: 20px; width: 100%; max-width: 400px; text-align: center; overflow: hidden; }
+        .coupon-box { background: #f1f2f6; border: 2px dashed var(--primary); padding: 15px; margin: 15px; font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+        .btn { padding: 12px 30px; border-radius: 30px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-main { background: var(--accent); color: white; box-shadow: 0 5px 0 #e67e22; }
+    </style>
+</head>
+<body>
+    <div id="start-screen" class="screen"><div class="logo">FIND IT!</div><button class="btn btn-main" onclick="showScreen('level-screen')">PLAY NOW</button></div>
+
+    <div id="level-screen" class="screen hidden">
+        <div class="game-header"><span onclick="showScreen('start-screen')"><i class="fas fa-arrow-left"></i></span><span>LEVELS</span><span style="opacity:0"></span></div>
+        <div class="level-grid" id="level-container"></div>
+        
+        <div class="ad-banner-fixed">
+            <ins class="adsbygoogle"
+                 style="display:inline-block;width:320px;height:50px"
+                 data-ad-client="ca-pub-3588683832476101"
+                 data-ad-slot="4802433714"></ins> <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
+    </div>
+
+    <div id="game-screen" class="screen hidden">
+        <div class="game-header"><div id="lives-display" style="color:var(--primary)">❤️❤️❤️</div><div id="diff-count">0/0</div><button class="btn" onclick="quitGame()">QUIT</button></div>
+        <div class="game-area">
+            <div class="image-wrapper"><img id="img-orig" src=""></div>
+            <div class="image-wrapper" id="target-wrapper" onclick="handleTap(event)"><img id="img-edit" src=""><div id="correct-marks-layer" style="position:absolute; inset:0; pointer-events:none;"></div></div>
+        </div>
+    </div>
+
+    <div id="giveaway-modal" class="hidden">
+        <div class="modal-content">
+            <img id="ga-banner" src="" style="width:100%"><div style="padding:20px"><h2>WINNER! 🎉</h2><div class="coupon-box" id="ga-coupon"></div><button class="btn btn-main" id="ga-link-btn" style="width:100%">CLAIM</button><button class="btn" onclick="location.reload()">BACK</button></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAl8WZfpWJGSztysBh6pSI4z6kvwPl2oow",
+            authDomain: "find-difference-game-1b210.firebaseapp.com",
+            databaseURL: "https://find-difference-game-1b210-default-rtdb.firebaseio.com",
+            projectId: "find-difference-game-1b210",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let levels = {}, currentLvlData = null, foundIndices = [], lives = 3;
+        const LOGIC_W = 1280, LOGIC_H = 720;
+
+        db.ref('levels').on('value', snap => { levels = snap.val() || {}; renderLevels(); });
+
+        function renderLevels() {
+            const container = document.getElementById('level-container');
+            container.innerHTML = '';
+            Object.keys(levels).forEach(id => {
+                const lvl = levels[id];
+                const card = document.createElement('div');
+                card.className = 'level-card';
+                card.innerHTML = `<img src="${lvl.image1}"><div style="padding:10px"><strong>${lvl.title}</strong></div>`;
+                card.onclick = () => startLevel(id);
+                container.appendChild(card);
+            });
+        }
+
+        function startLevel(id) {
+            currentLvlData = levels[id]; foundIndices = []; lives = 3;
+            document.getElementById('img-orig').src = currentLvlData.image1;
+            document.getElementById('img-edit').src = currentLvlData.image2;
+            document.getElementById('correct-marks-layer').innerHTML = '';
+            updateUI(); showScreen('game-screen');
+        }
+
+        function handleTap(e) {
+            if (lives <= 0 || foundIndices.length === currentLvlData.differences.length) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * LOGIC_W;
+            const y = ((e.clientY - rect.top) / rect.height) * LOGIC_H;
+            let found = false;
+            currentLvlData.differences.forEach((diff, i) => {
+                if (!foundIndices.includes(i) && Math.sqrt((x - diff.x)**2 + (y - diff.y)**2) <= diff.radius) {
+                    found = true; foundIndices.push(i); markCorrect(diff.x, diff.y, diff.radius);
+                }
+            });
+            if (found) { showFeedback(e.clientX - rect.left, e.clientY - rect.top, 'correct-tap'); updateUI(); if (foundIndices.length === currentLvlData.differences.length) endLevel(); }
+            else { lives--; showFeedback(e.clientX - rect.left, e.clientY - rect.top, 'wrong-tap'); updateUI(); if (lives <= 0) { alert("Game Over"); quitGame(); } }
+        }
+
+        function markCorrect(x, y, r) {
+            const mark = document.createElement('div');
+            mark.style.cssText = `position:absolute; left:${(x/LOGIC_W)*100}%; top:${(y/LOGIC_H)*100}%; width:${(r*2/LOGIC_W)*100}%; aspect-ratio:1; border:3px solid var(--success); border-radius:50%; transform:translate(-50%, -50%);`;
+            document.getElementById('correct-marks-layer').appendChild(mark);
+        }
+
+        function showFeedback(x, y, cls) {
+            const f = document.createElement('div'); f.className = `tap-feedback ${cls}`; f.style.left = `${x}px`; f.style.top = `${y}px`;
+            document.getElementById('target-wrapper').appendChild(f); setTimeout(() => f.remove(), 600);
+        }
+
+        function updateUI() {
+            document.getElementById('lives-display').innerText = '❤️'.repeat(lives);
+            document.getElementById('diff-count').innerText = `${foundIndices.length}/${currentLvlData.differences.length}`;
+        }
+
+        function endLevel() {
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            
+            if(window.adsbygoogle) { (adsbygoogle = window.adsbygoogle || []).push({ google_ad_modality: 'interstitial' }); }
+
+            setTimeout(() => {
+                const ga = currentLvlData.giveaway;
+                if (ga && ga.coupon) {
+                    document.getElementById('ga-banner').src = ga.image;
+                    document.getElementById('ga-coupon').innerText = ga.coupon;
+                    document.getElementById('ga-link-btn').onclick = () => window.open(ga.link, '_blank');
+                    document.getElementById('giveaway-modal').classList.remove('hidden');
+                } else { alert("Level Complete!"); quitGame(); }
+            }, 1000);
+        }
+
+        function showScreen(id) { 
+            document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); 
+            document.getElementById(id).classList.remove('hidden');
+            if(id === 'level-screen') { (adsbygoogle = window.adsbygoogle || []).push({}); }
+        }
+        function quitGame() { document.getElementById('giveaway-modal').classList.add('hidden'); showScreen('level-screen'); }
+    </script>
+</body>
+</html>
